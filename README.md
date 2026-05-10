@@ -29,8 +29,9 @@ The raw `obsidian` CLI requires a `vault=<id>` prefix on every call (see your `o
 ## Install
 
 ```bash
-pi install /Users/lucas/Developer/pi-obsidian       # local dev path
-pi install git:github.com/lulucatdev/pi-obsidian    # later, from git
+pi install npm:@capyup/pi-obsidian             # from npm (recommended)
+pi install git:github.com/capyup/pi-obsidian   # from git
+pi install /path/to/pi-obsidian                # from local checkout (dev)
 ```
 
 ## Prerequisites
@@ -83,7 +84,8 @@ agent calls obsidian_open { path: "ops/tailscale/tailscale-add-windows.md", newt
 ## Development
 
 ```bash
-cd /Users/lucas/Developer/pi-obsidian
+git clone https://github.com/capyup/pi-obsidian
+cd pi-obsidian
 npm install
 npm run typecheck         # tsc --noEmit
 npm run pack:check        # npm pack --dry-run (verify files glob)

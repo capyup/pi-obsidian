@@ -1,40 +1,48 @@
 {
-  "name": "pi-obsidian",
+  "name": "@capyup/pi-obsidian",
   "version": "0.1.0",
-  "description": "pi extension that wraps the Obsidian CLI as typed tools — read, list, search, outline, create, append, open, backlinks, tags, daily-append.",
-  "license": "MIT",
+  "description": "pi extension that wraps the Obsidian CLI as typed tools — read, list, search, outline, create, append, open, backlinks, tags, and daily-append against the active vault.",
   "type": "module",
   "keywords": [
     "pi-package",
     "pi",
+    "pi-extension",
     "obsidian",
     "vault",
     "notes",
     "markdown"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/capyup/pi-obsidian"
+  },
+  "bugs": {
+    "url": "https://github.com/capyup/pi-obsidian/issues"
+  },
+  "homepage": "https://github.com/capyup/pi-obsidian#readme",
+  "author": "capyup",
+  "license": "MIT",
   "files": [
-    "extensions/**/*",
+    "extensions",
     "README.md",
-    "LICENSE",
-    "package.json",
-    "tsconfig.json"
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "pack:check": "npm pack --dry-run"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.74.0",
-    "typebox": "^1.1.24"
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
     "typebox": "^1.1.24",
     "typescript": "^5.9.3"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/lulucatdev/pi-obsidian.git"
   },
   "pi": {
     "extensions": [
