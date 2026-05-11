@@ -76,33 +76,6 @@ function findActiveVault(): VaultInfo | undefined {
 	return undefined;
 }
 
-// ---------- path guards ----------
-
-/**
- * A vault-relative path MUST NOT start with / or ~.
- * It looks like: "folder/note.md" or "inbox/idea.md".
- */
-function isVaultRelative(path: string): boolean {
-	if (!path || path.length === 0) return false;
-	return !path.startsWith("/") && !path.startsWith("~");
-}
-
-/**
- * Throw a clear error when an absolute path is passed to an obsidian tool.
- * This is the last line of defense; promptGuidelines should prevent most
- * misuse, but agents can still emit the wrong path.
- */
-function guardVaultPath(toolName: string, path: string | undefined): void {
-	if (path === undefined) return;
-	if (!isVaultRelative(path)) {
-		throw new Error(
-			`${toolName} only accepts vault-relative paths (e.g. 'folder/note.md'). ` +
-				`The path "${path}" looks like an absolute path. ` +
-				`Use the generic file tools (read/edit/write) for files outside the Obsidian vault.`
-		);
-	}
-}
-
 // ---------- CLI binary discovery ----------
 
 function obsidianBin(): string {
@@ -179,46 +152,9 @@ function ok(text: string, details: Record<string, unknown> = {}) {
 	return { content: [{ type: "text" as const, text }], details };
 }
 
-// ---------- prompt guideline builder ----------
-
-function vaultPrefix(vaultPath: string | undefined): string {
-	if (!vaultPath) {
-		return "No active Obsidian vault was detected. Avoid using obsidian tools unless the user explicitly mentions Obsidian.";
-	}
-	return `The active Obsidian vault is located at: ${vaultPath}. Only use obsidian tools for files inside this vault.`;
-}
-
-function vaultPathGuideline(vaultPath: string | undefined): string {
-	if (!vaultPath) {
-		return "Do NOT use obsidian tools for arbitrary file operations when no vault is active.";
-	}
-	return `For absolute paths (starting with / or ~) or files outside ${vaultPath}, use the generic file tools (read, edit, write) instead of obsidian tools.`;
-}
-
 // ---------- tools ----------
 
 export default function obsidianExtension(pi: ExtensionAPI) {
-	const vault = findActiveVault();
-	const vPrefix = vaultPrefix(vault?.path);
-	const vPathRule = vaultPathGuideline(vault?.path);
-
-	// Inject vault awareness at session start so the agent knows the boundary
-	pi.on("session_start", (_event) => {
-		if (vault) {
-			pi.sendMessage(
-				{
-					customType: "vault_info",
-					content: `Obsidian vault active: ${vault.path} (id=${vault.id}). ` +
-						`All obsidian_* tools require vault-relative paths (no leading / or ~). ` +
-						`Use generic read/edit/write for absolute paths outside the vault.`,
-					display: false,
-					details: {},
-				},
-				{ deliverAs: "steer" },
-			);
-		}
-	});
-
 	pi.registerTool({
 		name: "obsidian_read",
 		label: "Obsidian: Read",
@@ -227,17 +163,13 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			"The path must be vault-relative (e.g. 'ops/index.md'); leading slashes are not allowed.",
 		promptSnippet: "Read a note from the active Obsidian vault by vault-relative path.",
 		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_read ONLY when the user explicitly references Obsidian AND the path is vault-relative (e.g. 'folder/note.md', not starting with / or ~).`,
-			vPathRule,
-			`If the user gives an absolute path like /Users/... or /tmp/... or a path in the current working directory, use the generic read tool, NOT obsidian_read.`,
-			`Path is always vault-relative, e.g. 'folder/note.md'. Do not pass absolute paths to obsidian_read.`,
+			"Use this instead of the generic file-read tool when the file lives inside an Obsidian vault — it goes through Obsidian's index and respects vault aliasing.",
+			"Path is always vault-relative, e.g. 'folder/note.md'. Do not pass absolute paths.",
 		],
 		parameters: Type.Object({
 			path: Type.String({ description: "Vault-relative path to the note, e.g. 'ops/index.md'" }),
 		}),
 		async execute(_id, params) {
-			guardVaultPath("obsidian_read", params.path);
 			const text = await obsCmd(["read", `path=${params.path}`]);
 			return ok(text, { tool: "obsidian_read", path: params.path });
 		},
@@ -251,18 +183,14 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			"and extension filter (e.g. 'md', 'canvas').",
 		promptSnippet: "List notes in an Obsidian vault, optionally scoped by folder or extension.",
 		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_list ONLY when the user asks to list files inside their Obsidian vault.`,
-			`For listing files in the current working directory or external folders, use the generic ls or find tools instead.`,
-			`Default lists all files in the entire vault — pass 'folder' to scope.`,
-			`Use 'ext=md' to restrict to markdown notes.`,
+			"Default lists all files in the entire vault — pass `folder` to scope.",
+			"Use `ext='md'` to restrict to markdown notes.",
 		],
 		parameters: Type.Object({
 			folder: Type.Optional(Type.String({ description: "Vault-relative folder, e.g. 'ops/tailscale'" })),
 			ext: Type.Optional(Type.String({ description: "Extension filter without dot, e.g. 'md'" })),
 		}),
 		async execute(_id, params) {
-			if (trimEmpty(params.folder)) guardVaultPath("obsidian_list", params.folder);
 			const args = ["files"];
 			if (trimEmpty(params.folder)) args.push(`folder=${params.folder}`);
 			if (trimEmpty(params.ext)) args.push(`ext=${params.ext}`);
@@ -279,11 +207,8 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			"with their context (path:line: text). Optional folder scope and result limit.",
 		promptSnippet: "Grep-style content search across an Obsidian vault.",
 		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_search ONLY when the user explicitly asks to search inside their Obsidian vault.`,
-			`For searching files in the current working directory or external folders, use the generic grep tool instead.`,
-			`Use obsidian_search for content discovery inside the vault; do not read the whole vault to find a string.`,
-			`limit defaults to 50 matches. Pass a higher value only if needed.`,
+			"Use this for content discovery; do not read the whole vault to find a string.",
+			"`limit` defaults to 50 matches. Pass a higher value only if needed.",
 		],
 		parameters: Type.Object({
 			query: Type.String({ description: "Substring or phrase to search for" }),
@@ -292,7 +217,6 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			caseSensitive: Type.Optional(Type.Boolean({ description: "Case-sensitive match (default false)" })),
 		}),
 		async execute(_id, params) {
-			if (trimEmpty(params.path)) guardVaultPath("obsidian_search", params.path);
 			const args = ["search:context", `query=${params.query}`];
 			if (trimEmpty(params.path)) args.push(`path=${params.path}`);
 			args.push(`limit=${params.limit ?? 50}`);
@@ -313,12 +237,8 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 		description: "Show the heading outline (tree of headings) of a note in the active Obsidian vault.",
 		promptSnippet: "Show the heading outline of an Obsidian note.",
 		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_outline ONLY when the user asks for an outline of a note inside their Obsidian vault AND provides a vault-relative path.`,
-			vPathRule,
-			`For absolute paths or files outside the vault, use the generic read tool and inspect headings manually instead of obsidian_outline.`,
-			`Use obsidian_outline to understand a note's structure before reading it in full.`,
-			`Format defaults to a tree; pass 'format=md' for markdown headings or 'format=json' for structured data.`,
+			"Use this to understand a note's structure before reading it in full.",
+			"Format defaults to a tree; pass `format='md'` for markdown headings or `format='json'` for structured data.",
 		],
 		parameters: Type.Object({
 			path: Type.String({ description: "Vault-relative path to the note" }),
@@ -329,7 +249,6 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			),
 		}),
 		async execute(_id, params) {
-			guardVaultPath("obsidian_outline", params.path);
 			const args = ["outline", `path=${params.path}`];
 			if (params.format) args.push(`format=${params.format}`);
 			const text = await obsCmd(args);
@@ -345,12 +264,8 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			"an existing file. Pass `open=true` to open the new note in the app.",
 		promptSnippet: "Create a new note in the active Obsidian vault.",
 		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_create ONLY when the user explicitly asks to create a note inside their Obsidian vault.`,
-			vPathRule,
-			`If the user wants to create a file in the current working directory or an external folder, use the generic write tool instead.`,
-			`Use vault-relative path. Parent folders are created as needed.`,
-			`Default behavior is to fail if the file exists; pass 'overwrite=true' to replace.`,
+			"Use vault-relative path. Parent folders are created as needed.",
+			"Default behavior is to fail if the file exists; pass `overwrite=true` to replace.",
 		],
 		parameters: Type.Object({
 			path: Type.String({ description: "Vault-relative path of the new note, e.g. 'inbox/idea.md'" }),
@@ -359,7 +274,6 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			open: Type.Optional(Type.Boolean({ description: "Open the file in Obsidian after creating" })),
 		}),
 		async execute(_id, params) {
-			guardVaultPath("obsidian_create", params.path);
 			const args = ["create", `path=${params.path}`];
 			if (params.content !== undefined) args.push(`content=${params.content}`);
 			if (params.overwrite) args.push("overwrite");
@@ -381,12 +295,8 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			"the new content; pass `inline=true` to append on the same line.",
 		promptSnippet: "Append content to an Obsidian note.",
 		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_append ONLY when the user explicitly asks to append to a note inside their Obsidian vault.`,
-			vPathRule,
-			`If the user wants to append to a file in the current working directory or an external folder, use the generic edit or write tools instead.`,
-			`Prefer obsidian_append over read-modify-write for adding to logs, daily notes, or running task lists inside the vault.`,
-			`Path is vault-relative.`,
+			"Prefer this over read-modify-write for adding to logs, daily notes, or running task lists.",
+			"Path is vault-relative.",
 		],
 		parameters: Type.Object({
 			path: Type.String({ description: "Vault-relative path to the note" }),
@@ -394,7 +304,6 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			inline: Type.Optional(Type.Boolean({ description: "Skip leading newline (default false)" })),
 		}),
 		async execute(_id, params) {
-			guardVaultPath("obsidian_append", params.path);
 			const args = ["append", `path=${params.path}`, `content=${params.content}`];
 			if (params.inline) args.push("inline");
 			const text = await obsCmd(args);
@@ -414,12 +323,8 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			"frontmatter so YAML metadata stays at the top.",
 		promptSnippet: "Prepend content to an Obsidian note (after frontmatter).",
 		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_prepend ONLY when the user explicitly asks to prepend to a note inside their Obsidian vault.`,
-			vPathRule,
-			`If the user wants to prepend to a file in the current working directory or an external folder, use the generic edit tool instead.`,
-			`Use obsidian_prepend for inserting new entries at the top of running logs or topic notes inside the vault.`,
-			`Frontmatter (--- YAML ---) is preserved automatically.`,
+			"Use for inserting new entries at the top of running logs or topic notes.",
+			"Frontmatter (--- YAML ---) is preserved automatically.",
 		],
 		parameters: Type.Object({
 			path: Type.String({ description: "Vault-relative path to the note" }),
@@ -427,7 +332,6 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			inline: Type.Optional(Type.Boolean({ description: "Skip trailing newline (default false)" })),
 		}),
 		async execute(_id, params) {
-			guardVaultPath("obsidian_prepend", params.path);
 			const args = ["prepend", `path=${params.path}`, `content=${params.content}`];
 			if (params.inline) args.push("inline");
 			const text = await obsCmd(args);
@@ -445,19 +349,14 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 		description: "Open a note in the active Obsidian app — optionally in a new tab.",
 		promptSnippet: "Open an Obsidian note in the app.",
 		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_open ONLY when the user explicitly asks to open a note in the Obsidian app AND the path is vault-relative.`,
-			vPathRule,
-			`For files outside the vault, use a generic bash 'open' command (macOS) or system file opener instead of obsidian_open.`,
-			`Use obsidian_open after editing a note to surface it for the user to review.`,
-			`newtab=true opens in a new tab without closing existing tabs.`,
+			"Use after editing a note to surface it for the user to review.",
+			"`newtab=true` opens in a new tab without closing existing tabs.",
 		],
 		parameters: Type.Object({
 			path: Type.String({ description: "Vault-relative path to the note" }),
 			newtab: Type.Optional(Type.Boolean({ description: "Open in a new tab (default false)" })),
 		}),
 		async execute(_id, params) {
-			guardVaultPath("obsidian_open", params.path);
 			const args = ["open", `path=${params.path}`];
 			if (params.newtab) args.push("newtab");
 			const text = await obsCmd(args);
@@ -475,18 +374,13 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 		description: "List backlinks to a note in the active Obsidian vault.",
 		promptSnippet: "List backlinks to an Obsidian note.",
 		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_backlinks ONLY when the user asks about backlinks inside their Obsidian vault.`,
-			vPathRule,
-			`Backlinks are an Obsidian concept and have no equivalent for plain files; for non-vault files, use the generic grep tool to search for references instead.`,
-			`Useful for impact analysis before renaming, deleting, or restructuring a note inside the vault.`,
+			"Useful for impact analysis before renaming, deleting, or restructuring a note.",
 		],
 		parameters: Type.Object({
 			path: Type.String({ description: "Vault-relative path to the note" }),
 			counts: Type.Optional(Type.Boolean({ description: "Include reference counts" })),
 		}),
 		async execute(_id, params) {
-			guardVaultPath("obsidian_backlinks", params.path);
 			const args = ["backlinks", `path=${params.path}`];
 			if (params.counts) args.push("counts");
 			const text = await obsCmd(args);
@@ -501,18 +395,12 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			"List tags in the active Obsidian vault, or for a single note when `path` is provided. " +
 			"Pass `counts=true` to include occurrence counts.",
 		promptSnippet: "List tags across the vault or in a single note.",
-		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_tags ONLY when the user asks about tags inside their Obsidian vault.`,
-			`Tags are an Obsidian feature; for non-vault markdown files, use the generic grep tool to find #tag patterns instead of obsidian_tags.`,
-			`Pass 'path' for note-scoped tags; omit it for vault-wide tag inventory.`,
-		],
+		promptGuidelines: ["Pass `path` for note-scoped tags; omit it for vault-wide tag inventory."],
 		parameters: Type.Object({
 			path: Type.Optional(Type.String({ description: "Vault-relative path (note-scoped)" })),
 			counts: Type.Optional(Type.Boolean({ description: "Include tag occurrence counts" })),
 		}),
 		async execute(_id, params) {
-			if (trimEmpty(params.path)) guardVaultPath("obsidian_tags", params.path);
 			const args = ["tags"];
 			if (trimEmpty(params.path)) args.push(`path=${params.path}`);
 			if (params.counts) args.push("counts");
@@ -529,11 +417,8 @@ export default function obsidianExtension(pi: ExtensionAPI) {
 			"note if it does not exist (per the vault's Daily Notes plugin settings).",
 		promptSnippet: "Append a line to today's daily note.",
 		promptGuidelines: [
-			vPrefix,
-			`Use obsidian_daily_append ONLY when the user explicitly asks to write to their Obsidian daily note (a vault-specific concept).`,
-			`For appending to an arbitrary external log file outside the vault, use the generic edit or write tools instead of obsidian_daily_append.`,
-			`Use for journaling, decision logs, or end-of-session summaries inside the vault.`,
-			`Daily Notes core plugin must be enabled in the vault.`,
+			"Use for journaling, decision logs, or end-of-session summaries.",
+			"Daily Notes core plugin must be enabled in the vault.",
 		],
 		parameters: Type.Object({
 			content: Type.String({ description: "Content to append (use \\n for newlines)" }),

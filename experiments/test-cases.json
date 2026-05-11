@@ -1,0 +1,98 @@
+{
+  "version": "1.0",
+  "categories": {
+    "A_should_use_obsidian": {
+      "description": "文件明确在 Obsidian vault 内，应使用 obsidian 工具",
+      "cases": [
+        {
+          "id": "A1",
+          "prompt": "Read ops/index.md from my vault",
+          "expected_tool": "obsidian_read",
+          "reasoning": "用户明确提到 'my vault' 且路径是 vault-relative"
+        },
+        {
+          "id": "A2",
+          "prompt": "Search my Obsidian notes for 'tailscale'",
+          "expected_tool": "obsidian_search",
+          "reasoning": "用户明确提到 'Obsidian notes'"
+        },
+        {
+          "id": "A3",
+          "prompt": "Append to today's daily note",
+          "expected_tool": "obsidian_daily_append",
+          "reasoning": "Daily note 是 Obsidian 特有概念"
+        },
+        {
+          "id": "A4",
+          "prompt": "Show me the outline of projects/big-project.md in Obsidian",
+          "expected_tool": "obsidian_outline",
+          "reasoning": "用户明确提到 'in Obsidian' 且路径 vault-relative"
+        },
+        {
+          "id": "A5",
+          "prompt": "List all markdown files in my Obsidian vault under folder 'recipes'",
+          "expected_tool": "obsidian_list",
+          "reasoning": "用户明确提到 'Obsidian vault'"
+        }
+      ]
+    },
+    "B_should_not_use_obsidian": {
+      "description": "文件明确不在 Obsidian vault 内，不应使用 obsidian 工具",
+      "cases": [
+        {
+          "id": "B1",
+          "prompt": "Read /Users/lucas/Developer/some-project/README.md",
+          "expected_tool": "read",
+          "reasoning": "绝对路径，明确在 vault 外"
+        },
+        {
+          "id": "B2",
+          "prompt": "Edit the file /etc/hosts",
+          "expected_tool": "edit",
+          "reasoning": "系统路径，绝对不在 vault 内"
+        },
+        {
+          "id": "B3",
+          "prompt": "Write a new file /tmp/test.md",
+          "expected_tool": "write",
+          "reasoning": "/tmp 路径，绝对路径"
+        },
+        {
+          "id": "B4",
+          "prompt": "Read the package.json in current directory",
+          "expected_tool": "read",
+          "reasoning": "current directory 指工作目录，不是 vault"
+        },
+        {
+          "id": "B5",
+          "prompt": "Search for 'TODO' in all files under /Users/lucas/Developer",
+          "expected_tool": "grep",
+          "reasoning": "外部目录搜索，应使用 generic grep"
+        }
+      ]
+    },
+    "C_ambiguous": {
+      "description": "路径信息不足，agent 应先确认",
+      "cases": [
+        {
+          "id": "C1",
+          "prompt": "Read that markdown file I mentioned earlier",
+          "expected_behavior": "ask_for_clarification",
+          "reasoning": "没有路径信息，agent 不应猜测"
+        },
+        {
+          "id": "C2",
+          "prompt": "Update the meeting notes",
+          "expected_behavior": "ask_for_clarification",
+          "reasoning": "不知道 meeting notes 在哪里"
+        },
+        {
+          "id": "C3",
+          "prompt": "Create a new note called 'ideas.md'",
+          "expected_behavior": "ask_for_clarification",
+          "reasoning": "不知道放在 vault 内还是外部"
+        }
+      ]
+    }
+  }
+}

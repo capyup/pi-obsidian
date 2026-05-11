@@ -1,0 +1,10 @@
+=== C1: ambiguous README ===
+  13 "name":"read"
+
+=== C2: ambiguous meeting notes ===
+  27 "name":"obsidian_list"
+  19 "name":"obsidian_search"
+  37 "name":"question"
+
+=== Borderline: just 'my notes' without 'Obsidian' ===
+  15 "name":"obsidian_search"

@@ -1,0 +1,5 @@
+=== B2: write absolute path ===
+  17 "name":"write"
+
+=== B3: read cwd-relative package.json ===
+  15 "name":"read"
